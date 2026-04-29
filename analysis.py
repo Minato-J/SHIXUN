@@ -10,12 +10,11 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import DBSCAN, KMeans
+from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.neighbors import NearestNeighbors
-from sklearn.metrics import silhouette_score, mean_absolute_error, mean_squared_error, r2_score
-from sklearn.svm import SVR
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import silhouette_score
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -24,6 +23,16 @@ warnings.filterwarnings('ignore')
 # ============================================================
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
 plt.rcParams['axes.unicode_minus'] = False
+
+
+# ============================================================
+# 工具函数：确保输出目录存在
+# ============================================================
+def ensure_dir(filepath):
+    dirname = os.path.dirname(filepath)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
+
 
 # ============================================================
 # 第1步：数据加载与基本检查
@@ -78,6 +87,7 @@ for ax, col, title, color in zip(axes, features, titles, colors):
 
 axes[-1].set_xlabel('DateTime')
 plt.tight_layout()
+ensure_dir('RW1/waveforms.png')
 plt.savefig('RW1/waveforms.png', dpi=200)
 plt.close()
 print("已保存: waveforms.png")
@@ -100,6 +110,7 @@ ax2.set_ylabel('Active Power (kW)', color='firebrick')
 ax2.tick_params(axis='y', labelcolor='firebrick')
 plt.title('Wind Speed vs Active Power Over Time')
 plt.tight_layout()
+ensure_dir('RW1/timeseries_plot.png')
 plt.savefig('RW1/timeseries_plot.png', dpi=200)
 plt.close()
 print("已保存: timeseries_plot.png")
@@ -116,6 +127,7 @@ ax.set_ylabel('Active Power (kW)')
 ax.set_title('Scatter Plot: Wind Speed vs Active Power')
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
+ensure_dir('RW1/scatter_plot.png')
 plt.savefig('RW1/scatter_plot.png', dpi=200)
 plt.close()
 print("已保存: scatter_plot.png")
@@ -135,7 +147,7 @@ else:
     for col in df.columns:
         if col == 'DATATIME':
             continue
-        df[col] = df[col].fillna(method='ffill')
+        df[col] = df[col].ffill()  # 使用 ffill() 替代废弃的 fillna(method='ffill')
     print("短时缺失已使用前向填充法处理。")
 
 # -------- 物理异常值剔除 --------
@@ -201,6 +213,7 @@ axes[1].set_ylabel('Active Power (kW)')
 axes[1].set_title('After: Outliers Removed')
 axes[1].grid(True, alpha=0.3)
 plt.tight_layout()
+ensure_dir('RW1/scatter_denoised.png')
 plt.savefig('RW1/scatter_denoised.png', dpi=200)
 plt.close()
 print("已保存: scatter_denoised.png")
@@ -234,6 +247,7 @@ ax.set_ylabel('Active Power (normalized)')
 ax.set_title('Scatter Plot (After Normalization)')
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
+ensure_dir('RW1/scatter_normalized.png')
 plt.savefig('RW1/scatter_normalized.png', dpi=200)
 plt.close()
 print("已保存: scatter_normalized.png")
@@ -305,7 +319,8 @@ for i in range(n):
 
 plt.suptitle('六维特征散点图矩阵', fontsize=14)
 plt.tight_layout()
-plt.savefig('scatter_matrix.png', dpi=150)
+ensure_dir('RW2/scatter_matrix.png')
+plt.savefig('RW2/scatter_matrix.png', dpi=150)
 plt.close()
 print("已保存: scatter_matrix.png")
 
@@ -329,7 +344,8 @@ ax.set_theta_direction(-1)
 ax.set_theta_offset(np.pi / 2)
 ax.set_title('风向玫瑰图 (15° 分箱)', fontsize=14, pad=20)
 plt.tight_layout()
-plt.savefig('wind_rose.png', dpi=150)
+ensure_dir('RW2/wind_rose.png')
+plt.savefig('RW2/wind_rose.png', dpi=150)
 plt.close()
 print("已保存: wind_rose.png")
 
@@ -359,7 +375,8 @@ for i in range(n):
 plt.title('皮尔逊相关系数热力图', fontsize=14)
 plt.colorbar(im, shrink=0.8)
 plt.tight_layout()
-plt.savefig('correlation_heatmap.png', dpi=150)
+ensure_dir('RW2/correlation_heatmap.png')
+plt.savefig('RW2/correlation_heatmap.png', dpi=150)
 plt.close()
 print("已保存: correlation_heatmap.png")
 
@@ -375,5 +392,3 @@ selected_features = power_corr[power_corr >= threshold].index.tolist()
 print(f"\n设定阈值 ≥ {threshold}")
 print(f"筛选后的关键特征: {selected_features}")
 print(f"筛选后的特征数: {len(selected_features)}")
-
-

@@ -9,15 +9,25 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
 plt.rcParams['axes.unicode_minus'] = False
+
+
+# ============================================================
+# 工具函数：确保输出目录存在
+# ============================================================
+def ensure_dir(filepath):
+    dirname = os.path.dirname(filepath)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
+
 
 print("=" * 60)
 print("任务3：风电数据 K-means 聚类分析")
@@ -38,7 +48,8 @@ selected_features = power_corr[power_corr >= threshold].index.tolist()
 print(f"基于相关性分析筛选的特征: {selected_features}")
 
 # 结合风速和功率进行聚类（加入 WINDPOWER 用于工况划分）
-cluster_features = selected_features + ['WINDPOWER']
+# 注意：如果 WINDPOWER 已经在 selected_features 中，避免重复
+cluster_features = list(dict.fromkeys(selected_features + ['WINDPOWER']))
 print(f"聚类使用的特征（结合风速和功率）: {cluster_features}")
 
 # 准备聚类数据
@@ -56,7 +67,7 @@ for k in k_range:
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     kmeans.fit(X_cluster)
     sse.append(kmeans.inertia_)
-    
+
     # 轮廓系数计算使用采样数据（O(n²)复杂度，采样加速）
     sample_size = min(5000, len(X_cluster))
     rng = np.random.RandomState(42)
@@ -83,7 +94,8 @@ ax2.set_title('轮廓系数法确定最优K值')
 ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('task3_kmeans_k_selection.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW3/task3_kmeans_k_selection.png')
+plt.savefig('RW3/task3_kmeans_k_selection.png', dpi=200, bbox_inches='tight')
 plt.close()
 print("已保存: task3_kmeans_k_selection.png")
 
@@ -120,7 +132,8 @@ plt.ylabel(f'第二主成分 (解释方差比: {pca.explained_variance_ratio_[1]
 plt.title(f'K-means聚类结果可视化 (K={optimal_k})')
 plt.colorbar(scatter)
 plt.grid(True, alpha=0.3)
-plt.savefig('task3_kmeans_clusters.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW3/task3_kmeans_clusters.png')
+plt.savefig('RW3/task3_kmeans_clusters.png', dpi=200, bbox_inches='tight')
 plt.close()
 print("已保存: task3_kmeans_clusters.png")
 
@@ -132,7 +145,8 @@ plt.ylabel('功率 (归一化)')
 plt.title(f'风速-功率散点图 (按聚类着色, K={optimal_k})')
 plt.colorbar(scatter)
 plt.grid(True, alpha=0.3)
-plt.savefig('task3_speed_power_clusters.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW3/task3_speed_power_clusters.png')
+plt.savefig('RW3/task3_speed_power_clusters.png', dpi=200, bbox_inches='tight')
 plt.close()
 print("已保存: task3_speed_power_clusters.png")
 
@@ -162,6 +176,10 @@ overall_silhouette = silhouette_score(X_cluster[idx_sample_final], cluster_label
 print(f"\n8. 聚类质量评估（采样 {sample_size_final} 条）:")
 print(f"  整体轮廓系数: {overall_silhouette:.4f}")
 
+# 保存带有 cluster 标签的数据供 Task4 使用
+df.to_csv('data_normalized.csv', index=False)
+print(f"\n已更新 data_normalized.csv（包含 cluster 列，共 {len(df.columns)} 列）")
+
 print("\n" + "=" * 60)
 print("任务3完成！")
 print("=" * 60)
@@ -169,4 +187,5 @@ print("生成的文件:")
 print("  1. task3_kmeans_k_selection.png   — K值选择图（肘部法和轮廓系数法）")
 print("  2. task3_kmeans_clusters.png      — K-means聚类结果PCA可视化")
 print("  3. task3_speed_power_clusters.png — 风速-功率聚类散点图")
+print("  4. data_normalized.csv            — 更新后包含 cluster 列的数据集")
 print("=" * 60)
