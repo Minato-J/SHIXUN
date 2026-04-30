@@ -3,10 +3,10 @@
 ================================
 任务目标：建立风电功率预测模型，对每一类数据分别训练，评估不同模型的预测性能，对比不同模型的预测效果。
 采用方法：支持向量回归(SVR)、BP神经网络、线性回归(Linear)
-评价指标：MAE、RMSE、R2
+评价指标：MAE、RMSE、R²
 
-注意：本脚本使用 task3 生成的聚类结果（data_normalized.csv 中的 cluster 列）。
-      如果该列不存在，会使用与 task3 相同的特征和方法重新聚类。
+依赖: 需先运行 task3_kmeans_analysis.py 生成 data_with_clusters.csv
+      若该文件缺失，将基于 data_normalized.csv 使用一致的逻辑重新聚类。
 """
 
 import pandas as pd
@@ -16,22 +16,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
-
-# ============================================================
-# 工具函数：确保输出目录存在
-# ============================================================
-def ensure_dir(filepath):
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+# 导入公共模块
+from common import (
+    ensure_dir, kmeans_cluster, load_selected_features,
+)
 
 # ============================================================
 # 主程序
@@ -40,44 +32,43 @@ print("=" * 60)
 print("任务4：风电场风电功率预测")
 print("=" * 60)
 
-# 加载预处理后的数据
-df = pd.read_csv('data_normalized.csv')
-print(f"数据集形状: {df.shape[0]} 行 × {df.shape[1]} 列")
+# 优先加载含聚类标签的数据集，否则回退到归一化数据集并重新聚类
+try:
+    df = pd.read_csv('data_with_clusters.csv')
+    print(f"加载 data_with_clusters.csv: {df.shape[0]} 行 × {df.shape[1]} 列")
+    if 'cluster' not in df.columns:
+        raise ValueError("data_with_clusters.csv 缺少 cluster 列")
+except FileNotFoundError:
+    print("未找到 data_with_clusters.csv，回退到 data_normalized.csv 重新聚类...")
+    df = pd.read_csv('data_normalized.csv')
+    print(f"加载 data_normalized.csv: {df.shape[0]} 行 × {df.shape[1]} 列")
 
 # ============================================================
-# 获取聚类标签：优先从已有列读取，否则重新聚类（与 task3 保持一致的逻辑）
+# 获取聚类标签：优先读取已有列，否则使用与 task3 一致的特征和逻辑重新聚类
 # ============================================================
 if 'cluster' in df.columns:
-    print("检测到已有 cluster 列，直接使用 task3 聚类结果。")
+    print("检测到已有 cluster 列，直接使用。")
     cluster_labels = df['cluster'].values
     n_clusters = len(np.unique(cluster_labels))
     print(f"聚类数: {n_clusters}")
 else:
-    print("未检测到 cluster 列，使用与 task3 相同的逻辑重新聚类...")
-    # 与 task3_kmeans_analysis.py 保持一致的聚类特征
-    selected_features = ['WINDSPEED', 'WINDDIRECTION', 'TEMPERATURE', 'HUMIDITY', 'PRESSURE']
-    cluster_features = selected_features + ['WINDPOWER']
+    print("未检测到 cluster 列，使用与 task3 一致的逻辑重新聚类...")
+
+    # 加载统一特征列表
+    try:
+        selected_features = load_selected_features()
+        print(f"从 selected_features.json 读取筛选特征: {selected_features}")
+    except FileNotFoundError:
+        from common import compute_correlation
+        _, _, selected_features = compute_correlation(df)
+
+    # 聚类特征 = 筛选特征 + WINDPOWER
+    cluster_features = list(dict.fromkeys(selected_features + ['WINDPOWER']))
     X_cluster = df[cluster_features].values
 
-    # 肘部法 + 轮廓系数法确定最优 K
-    k_range = range(2, 11)
-    silhouette_scores = []
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(X_cluster)
-        sample_size = min(5000, len(X_cluster))
-        rng = np.random.RandomState(42)
-        idx_sample = rng.choice(len(X_cluster), sample_size, replace=False)
-        sil = silhouette_score(X_cluster[idx_sample], labels[idx_sample])
-        silhouette_scores.append(sil)
-
-    optimal_k = k_range[np.argmax(silhouette_scores)]
-    print(f"基于轮廓系数的最优K值: {optimal_k}")
-
-    kmeans_final = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
-    cluster_labels = kmeans_final.fit_predict(X_cluster)
-    n_clusters = optimal_k
-    print(f"聚类数: {n_clusters}")
+    cluster_result = kmeans_cluster(X_cluster)
+    cluster_labels = cluster_result['labels']
+    n_clusters = cluster_result['optimal_k']
 
 df['cluster'] = cluster_labels
 
@@ -88,10 +79,20 @@ for i in range(n_clusters):
     print(f"  类别 {i}: {count} 个样本 ({percentage:.2f}%)")
 
 # ============================================================
-# 1. 数据准备：按聚类结果划分数据
+# 1. 数据准备：按聚类结果划分数据（使用与 task2 一致的特征）
 # ============================================================
 print("\n1. 数据准备：按聚类结果划分数据...")
-X_all = df[['WINDSPEED', 'TEMPERATURE', 'WINDDIRECTION', 'PRESSURE']].values
+
+# 加载统一特征列表作为模型输入（不包含 WINDPOWER，它是预测目标）
+try:
+    selected_features = load_selected_features()
+    print(f"模型输入特征（来自 selected_features.json）: {selected_features}")
+except FileNotFoundError:
+    from common import compute_correlation
+    _, _, selected_features = compute_correlation(df)
+    print(f"模型输入特征（基于当前数据计算）: {selected_features}")
+
+X_all = df[selected_features].values
 y_all = df['WINDPOWER'].values
 clusters = df['cluster'].values
 
@@ -224,7 +225,7 @@ if summary_results:
     print(summary_df.round(4))
 
     # 确保输出目录存在
-    ensure_dir('task4_model_comparison.png')
+    ensure_dir('RW4(SOLO)/task4_model_comparison.png')
 
     # 绘制模型性能对比图
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
@@ -240,7 +241,7 @@ if summary_results:
             axes[i].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('task4_model_comparison.png', dpi=200, bbox_inches='tight')
+    plt.savefig('RW4(SOLO)/task4_model_comparison.png', dpi=200, bbox_inches='tight')
     plt.close()
     print("已保存: task4_model_comparison.png")
 
@@ -251,7 +252,7 @@ if summary_results:
                 actual = results[cluster_id][model_name]['actual']
                 pred = results[cluster_id][model_name]['predictions']
 
-                out_path = f'task4_prediction_{cluster_id}_{model_name}.png'
+                out_path = f'RW4(SOLO)/task4_prediction_{cluster_id}_{model_name}.png'
                 ensure_dir(out_path)
 
                 plt.figure(figsize=(10, 6))

@@ -1,44 +1,30 @@
 """
 风电场数据分析完整项目
 ================================
-任务包含四部分：
-  1. 数据预处理（已完成）
-  2. 可视化与相关性分析
-  3. K-means聚类分析
-  4. 风电功率预测模型
+四任务整合脚本 — 单次运行完成所有分析流程。
+
+依赖: 需要先有 DATE.csv 原始数据（首次运行需 analysis.py 生成 data_normalized.csv）
+输出: 各任务图表分别保存到 RW2/、RW3/、RW4(SOLO)/ 目录
 """
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, silhouette_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.decomposition import PCA
-import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# ============================================================
-# 设置中文字体（用于图表标签）
-# ============================================================
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
-
-
-# ============================================================
-# 工具函数：确保输出目录存在
-# ============================================================
-def ensure_dir(filepath):
-    dirname = os.path.dirname(filepath)
-    if dirname:
-        os.makedirs(dirname, exist_ok=True)
+# 导入公共模块
+from common import (
+    ensure_dir, compute_correlation, kmeans_cluster,
+    NUMERIC_COLS, CORRELATION_THRESHOLD,
+)
 
 
 # ============================================================
@@ -83,10 +69,10 @@ axes = pd.plotting.scatter_matrix(
 )
 plt.suptitle('六维特征散点图矩阵', fontsize=16)
 plt.tight_layout()
-ensure_dir('scatter_matrix.png')
-plt.savefig('scatter_matrix.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW2/scatter_matrix.png')
+plt.savefig('RW2/scatter_matrix.png', dpi=200, bbox_inches='tight')
 plt.close()
-print("已保存: scatter_matrix.png")
+print("已保存: RW2/scatter_matrix.png")
 
 # 3. 风向玫瑰图
 print("\n3. 绘制风向玫瑰图...")
@@ -112,10 +98,10 @@ def wind_rose_plot(df, bins=24):
 
 
 fig, ax = wind_rose_plot(df, bins=24)
-ensure_dir('wind_rose.png')
-plt.savefig('wind_rose.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW2/wind_rose.png')
+plt.savefig('RW2/wind_rose.png', dpi=200, bbox_inches='tight')
 plt.close()
-print("已保存: wind_rose.png")
+print("已保存: RW2/wind_rose.png")
 
 # 4. 相关性分析
 print("\n4. 相关性分析...")
@@ -127,10 +113,10 @@ sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0,
             square=True, fmt='.3f', cbar_kws={'shrink': 0.8})
 plt.title('特征相关性热力图')
 plt.tight_layout()
-ensure_dir('correlation_heatmap.png')
-plt.savefig('correlation_heatmap.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW2/correlation_heatmap.png')
+plt.savefig('RW2/correlation_heatmap.png', dpi=200, bbox_inches='tight')
 plt.close()
-print("已保存: correlation_heatmap.png")
+print("已保存: RW2/correlation_heatmap.png")
 
 # 提取与功率的相关系数
 power_corr = correlation_matrix['WINDPOWER'].drop('WINDPOWER').abs().sort_values(ascending=False)
@@ -152,55 +138,20 @@ print("\n" + "=" * 60)
 print("任务3：K-means聚类分析")
 print("=" * 60)
 
-# 1. 特征选择：使用筛选出的特征
-X_cluster = df[selected_features].values
-print(f"聚类使用的特征: {selected_features}")
+# 1. 特征选择：使用筛选出的特征 + WINDPOWER（与 task3 保持一致）
+cluster_features = list(dict.fromkeys(selected_features + ['WINDPOWER']))
+X_cluster = df[cluster_features].values
+print(f"聚类使用的特征: {cluster_features}")
 print(f"聚类数据形状: {X_cluster.shape}")
 
-# 2. 肘部法确定K值
-print("\n2. 使用肘部法确定最优K值...")
+# 2. 使用公共模块执行 K-means（含采样优化的轮廓系数计算）
+cluster_result = kmeans_cluster(
+    X_cluster,
+    save_k_plot_path='RW3/kmeans_k_selection.png'
+)
 
-k_range = range(2, 11)
-sse = []  # Sum of Squared Errors
-silhouette_scores = []
-
-for k in k_range:
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    kmeans.fit(X_cluster)
-    sse.append(kmeans.inertia_)
-    silhouette_avg = silhouette_score(X_cluster, kmeans.labels_)
-    silhouette_scores.append(silhouette_avg)
-
-# 绘制肘部法和轮廓系数图
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-
-ax1.plot(k_range, sse, 'bo-')
-ax1.set_xlabel('聚类数 K')
-ax1.set_ylabel('SSE (误差平方和)')
-ax1.set_title('肘部法确定最优K值')
-ax1.grid(True, alpha=0.3)
-
-ax2.plot(k_range, silhouette_scores, 'ro-')
-ax2.set_xlabel('聚类数 K')
-ax2.set_ylabel('轮廓系数')
-ax2.set_title('轮廓系数法确定最优K值')
-ax2.grid(True, alpha=0.3)
-
-plt.tight_layout()
-ensure_dir('kmeans_k_selection.png')
-plt.savefig('kmeans_k_selection.png', dpi=200, bbox_inches='tight')
-plt.close()
-print("已保存: kmeans_k_selection.png")
-
-# 找到最优K值
-optimal_k_silhouette = k_range[np.argmax(silhouette_scores)]
-print(f"基于轮廓系数的最优K值: {optimal_k_silhouette}")
-print(f"对应的轮廓系数: {max(silhouette_scores):.4f}")
-
-# 3. 执行聚类
-print(f"\n3. 使用K={optimal_k_silhouette}执行K-means聚类...")
-kmeans_final = KMeans(n_clusters=optimal_k_silhouette, random_state=42, n_init=10)
-cluster_labels = kmeans_final.fit_predict(X_cluster)
+cluster_labels = cluster_result['labels']
+optimal_k_silhouette = cluster_result['optimal_k']
 
 # 将聚类结果添加到数据框
 df['cluster'] = cluster_labels
@@ -219,10 +170,10 @@ plt.ylabel(f'第二主成分 (解释方差比: {pca.explained_variance_ratio_[1]
 plt.title(f'K-means聚类结果可视化 (K={optimal_k_silhouette})')
 plt.colorbar(scatter)
 plt.grid(True, alpha=0.3)
-ensure_dir('kmeans_clusters.png')
-plt.savefig('kmeans_clusters.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW3/kmeans_clusters.png')
+plt.savefig('RW3/kmeans_clusters.png', dpi=200, bbox_inches='tight')
 plt.close()
-print("已保存: kmeans_clusters.png")
+print("已保存: RW3/kmeans_clusters.png")
 
 # 风速-功率散点图，按聚类着色
 plt.figure(figsize=(10, 6))
@@ -232,10 +183,10 @@ plt.ylabel('功率 (归一化)')
 plt.title(f'风速-功率散点图 (按聚类着色, K={optimal_k_silhouette})')
 plt.colorbar(scatter)
 plt.grid(True, alpha=0.3)
-ensure_dir('speed_power_clusters.png')
-plt.savefig('speed_power_clusters.png', dpi=200, bbox_inches='tight')
+ensure_dir('RW3/speed_power_clusters.png')
+plt.savefig('RW3/speed_power_clusters.png', dpi=200, bbox_inches='tight')
 plt.close()
-print("已保存: speed_power_clusters.png")
+print("已保存: RW3/speed_power_clusters.png")
 
 # 输出聚类统计信息
 print(f"\n聚类结果统计:")
@@ -390,10 +341,10 @@ if summary_results:
             axes[i].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    ensure_dir('model_comparison.png')
-    plt.savefig('model_comparison.png', dpi=200, bbox_inches='tight')
+    ensure_dir('RW4(SOLO)/model_comparison.png')
+    plt.savefig('RW4(SOLO)/model_comparison.png', dpi=200, bbox_inches='tight')
     plt.close()
-    print("已保存: model_comparison.png")
+    print("已保存: RW4(SOLO)/model_comparison.png")
 
     # 绘制预测值vs真实值曲线图
     for cluster_id in results:
@@ -402,7 +353,7 @@ if summary_results:
                 actual = results[cluster_id][model_name]['actual']
                 pred = results[cluster_id][model_name]['predictions']
 
-                out_path = f'prediction_{cluster_id}_{model_name}.png'
+                out_path = f'RW4(SOLO)/prediction_{cluster_id}_{model_name}.png'
                 ensure_dir(out_path)
 
                 plt.figure(figsize=(10, 6))

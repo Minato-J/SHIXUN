@@ -1,28 +1,23 @@
 """
-风电数据分析项目 - 新版文件管理系统
+风电数据分析项目 - 新版文件管理系统（面向对象 + 时间戳输出目录）
+================================
 目录结构: task_outputs/TaskName/{timestamp}
 
-修复说明：
-  - 删除了无效的 self.data_path 逻辑（从未被使用）
-  - 添加了 try/finally 保护 os.chdir 操作
-  - 使用 .ffill() 替代废弃的 fillna(method='ffill')
-  - 添加了 ensure_dir 函数确保输出目录存在
-  - 清理了未使用的导入
+修复说明:
+  - 复用 common.py 公共模块消除代码重复
+  - 移除未使用的 original_cwd / restore_original_dir 逻辑
 """
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, silhouette_score
-from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.decomposition import PCA
 import warnings
 from pathlib import Path
 import os
@@ -30,18 +25,12 @@ from datetime import datetime
 
 warnings.filterwarnings('ignore')
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
-
-
-# ============================================================
-# 工具函数：确保输出目录存在
-# ============================================================
-def ensure_dir(filepath):
-    dirname = os.path.dirname(filepath)
-    if dirname:
-        os.makedirs(dirname, exist_ok=True)
+# 导入公共模块
+from common import (
+    ensure_dir, load_and_preprocess, dbscan_denoise, minmax_normalize,
+    compute_correlation, kmeans_cluster,
+    NUMERIC_COLS, CORRELATION_THRESHOLD,
+)
 
 
 class SimpleTaskFileManager:
@@ -54,7 +43,6 @@ class SimpleTaskFileManager:
         self.base_dir = Path(base_dir).resolve()
         self.base_dir.mkdir(exist_ok=True)
         self.current_task_dir = None
-        self.original_cwd = Path.cwd()  # 保存原始工作目录
 
     def create_task_folder(self, task_name, use_timestamp=True):
         """
@@ -83,14 +71,10 @@ class SimpleTaskFileManager:
 
     def switch_to_task_folder(self, task_name, use_timestamp=True):
         """
-        创建任务文件夹并返回路径（不再改变当前工作目录）
+        创建任务文件夹并返回路径（不改变当前工作目录）
         """
         task_dir = self.create_task_folder(task_name, use_timestamp)
         return task_dir
-
-    def restore_original_dir(self):
-        """恢复到原始工作目录"""
-        os.chdir(str(self.original_cwd))
 
 
 class WindAnalysisNewStructure:
@@ -105,70 +89,32 @@ class WindAnalysisNewStructure:
         self.file_manager = SimpleTaskFileManager()
 
     def task1_data_preprocessing(self):
-        """任务1：数据预处理"""
+        """任务1：数据预处理（使用公共模块）"""
         print("=" * 60)
         print("任务1：数据预处理")
         print("=" * 60)
 
-        # 创建任务1的文件夹（不再改变工作目录）
+        # 创建任务1的文件夹
         task_dir = self.file_manager.switch_to_task_folder("Task1")
 
-        # 使用绝对路径加载数据
-        df = pd.read_csv(self.data_source)
-        print(f"数据集形状: {df.shape[0]} 行 × {df.shape[1]} 列")
-
-        # 时间解析
-        df['DATATIME'] = pd.to_datetime(df['DATATIME'])
-        df = df.sort_values('DATATIME').reset_index(drop=True)
+        # 使用公共模块加载和预处理原始数据
+        df_raw, df_clean = load_and_preprocess(str(self.data_source))
 
         # 描述性统计
-        numeric_cols = ['WINDSPEED', 'WINDDIRECTION', 'TEMPERATURE', 'HUMIDITY', 'PRESSURE', 'WINDPOWER']
-        stats = df[numeric_cols].describe().T
+        stats = df_raw[['WINDSPEED', 'WINDPOWER']].describe().T
         stats['range'] = stats['max'] - stats['min']
-        stats_table = stats[['mean', 'std', 'min', '25%', '50%', '75%', 'max', 'range']]
         print("\nWINDSPEED (风速, m/s) 和 WINDPOWER (有功功率, kW) 的描述性统计:")
-        print(stats_table.to_string())
+        print(stats[['mean', 'std', 'min', '25%', '50%', '75%', 'max', 'range']].to_string())
 
-        # 缺失值处理
-        missing = df.isnull().sum()
-        if missing.sum() > 0:
-            for col in df.columns:
-                if col == 'DATATIME':
-                    continue
-                df[col] = df[col].ffill()  # 替代废弃的 fillna(method='ffill')
+        # DBSCAN 去噪（使用公共模块）
+        df_denoised = dbscan_denoise(df_clean)
 
-        # 物理异常值剔除
-        df = df[df['WINDPOWER'] >= 0].reset_index(drop=True)
-        df = df[df['WINDSPEED'] >= 0].reset_index(drop=True)
-
-        # DBSCAN去噪
-        X = df[['WINDSPEED', 'WINDPOWER']].values
-        scaler_std = StandardScaler()
-        X_scaled = scaler_std.fit_transform(X)
-
-        sample_size = min(5000, len(X_scaled))
-        idx_sample = np.random.choice(len(X_scaled), sample_size, replace=False)
-        X_sample = X_scaled[idx_sample]
-
-        neigh = NearestNeighbors(n_neighbors=10)
-        neigh.fit(X_sample)
-        distances, _ = neigh.kneighbors(X_sample)
-        k_dist = np.sort(distances[:, -1])
-        epsilon = np.percentile(k_dist, 95)
-
-        db = DBSCAN(eps=epsilon, min_samples=10)
-        labels = db.fit_predict(X_scaled)
-
-        df_clean = df[labels != -1].copy().reset_index(drop=True)
-
-        # 数据归一化
-        scaler = MinMaxScaler()
-        df_normalized = df_clean.copy()
-        df_normalized[numeric_cols] = scaler.fit_transform(df_clean[numeric_cols])
+        # Min-Max 归一化（使用公共模块）
+        df_normalized, _ = minmax_normalize(df_denoised)
 
         # 保存归一化后的数据到任务目录和根目录
         df_normalized.to_csv(str(task_dir / 'data_normalized.csv'), index=False)
-        df_normalized.to_csv('data_normalized.csv', index=False)  # 也保存到根目录供其他脚本使用
+        df_normalized.to_csv('data_normalized.csv', index=False)
         print("\n已保存: data_normalized.csv (归一化后的数据集)")
 
         # 绘制各属性波形图
@@ -207,18 +153,8 @@ class WindAnalysisNewStructure:
 
         task_dir = self.file_manager.switch_to_task_folder("Task2")
 
-        numeric_cols = ['WINDSPEED', 'WINDDIRECTION', 'TEMPERATURE', 'HUMIDITY', 'PRESSURE', 'WINDPOWER']
-
-        # 相关性分析
-        correlation_matrix = self.df[numeric_cols].corr()
-        power_corr = correlation_matrix['WINDPOWER'].drop('WINDPOWER').abs().sort_values(ascending=False)
-
-        # 特征筛选（相关系数绝对值 >= 0.2）
-        threshold = 0.2
-        selected_features = power_corr[power_corr >= threshold].index.tolist()
-        print(f"\n相关系数绝对值 >= {threshold} 的特征（用于后续建模）:")
-        for feature in selected_features:
-            print(f"  {feature}: {power_corr[feature]:.4f}")
+        # 相关性分析与特征筛选（使用公共模块）
+        correlation_matrix, power_corr_sorted, selected_features = compute_correlation(self.df)
 
         # 绘制相关性热力图
         plt.figure(figsize=(10, 8))
@@ -261,7 +197,7 @@ class WindAnalysisNewStructure:
         return correlation_matrix, selected_features
 
     def task3_kmeans_clustering(self, selected_features):
-        """任务3：K-means聚类分析"""
+        """任务3：K-means聚类分析（使用公共模块）"""
         if self.df is None:
             raise ValueError("请先运行任务1的数据预处理")
 
@@ -271,51 +207,20 @@ class WindAnalysisNewStructure:
 
         task_dir = self.file_manager.switch_to_task_folder("Task3")
 
-        X_cluster = self.df[selected_features].values
-        print(f"聚类使用的特征: {selected_features}")
+        # 聚类特征 = 筛选特征 + WINDPOWER（与分步脚本保持一致）
+        cluster_features = list(dict.fromkeys(selected_features + ['WINDPOWER']))
+        X_cluster = self.df[cluster_features].values
+        print(f"聚类使用的特征: {cluster_features}")
         print(f"聚类数据形状: {X_cluster.shape}")
 
-        # 肘部法和轮廓系数法确定最优K值
-        k_range = range(2, 11)
-        sse = []
-        silhouette_scores = []
+        # 使用公共模块执行聚类（含采样优化的轮廓系数 + K值选择图）
+        cluster_result = kmeans_cluster(
+            X_cluster,
+            save_k_plot_path=str(task_dir / 'kmeans_k_selection.png')
+        )
 
-        for k in k_range:
-            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-            kmeans.fit(X_cluster)
-            sse.append(kmeans.inertia_)
-
-            silhouette_avg = silhouette_score(X_cluster, kmeans.labels_)
-            silhouette_scores.append(silhouette_avg)
-
-        # 找到最优K值
-        optimal_k_silhouette = k_range[np.argmax(silhouette_scores)]
-        print(f"基于轮廓系数的最优K值: {optimal_k_silhouette}")
-
-        # 绘制K值选择图
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-
-        ax1.plot(k_range, sse, 'bo-')
-        ax1.set_xlabel('聚类数 K')
-        ax1.set_ylabel('SSE (误差平方和)')
-        ax1.set_title('肘部法确定最优K值')
-        ax1.grid(True, alpha=0.3)
-
-        ax2.plot(k_range, silhouette_scores, 'ro-')
-        ax2.set_xlabel('聚类数 K')
-        ax2.set_ylabel('轮廓系数')
-        ax2.set_title('轮廓系数法确定最优K值')
-        ax2.grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        out_path = str(task_dir / 'kmeans_k_selection.png')
-        plt.savefig(out_path, dpi=200, bbox_inches='tight')
-        plt.close()
-        print(f"已保存: {out_path}")
-
-        # 执行聚类
-        kmeans_final = KMeans(n_clusters=optimal_k_silhouette, random_state=42, n_init=10)
-        cluster_labels = kmeans_final.fit_predict(X_cluster)
+        cluster_labels = cluster_result['labels']
+        optimal_k = cluster_result['optimal_k']
 
         # 将聚类结果添加到数据框
         df_with_clusters = self.df.copy()
@@ -329,7 +234,7 @@ class WindAnalysisNewStructure:
         scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=cluster_labels, cmap='viridis', alpha=0.6, s=20)
         plt.xlabel(f'第一主成分 (解释方差比: {pca.explained_variance_ratio_[0]:.3f})')
         plt.ylabel(f'第二主成分 (解释方差比: {pca.explained_variance_ratio_[1]:.3f})')
-        plt.title(f'K-means聚类结果可视化 (K={optimal_k_silhouette})')
+        plt.title(f'K-means聚类结果可视化 (K={optimal_k})')
         plt.colorbar(scatter)
         plt.grid(True, alpha=0.3)
         out_path = str(task_dir / 'kmeans_clusters.png')
@@ -343,7 +248,7 @@ class WindAnalysisNewStructure:
                               c=cluster_labels, cmap='viridis', alpha=0.6, s=10)
         plt.xlabel('风速 (归一化)')
         plt.ylabel('功率 (归一化)')
-        plt.title(f'风速-功率散点图 (按聚类着色, K={optimal_k_silhouette})')
+        plt.title(f'风速-功率散点图 (按聚类着色, K={optimal_k})')
         plt.colorbar(scatter)
         plt.grid(True, alpha=0.3)
         out_path = str(task_dir / 'speed_power_clusters.png')
@@ -351,9 +256,9 @@ class WindAnalysisNewStructure:
         plt.close()
         print(f"已保存: {out_path}")
 
-        return df_with_clusters, optimal_k_silhouette
+        return df_with_clusters, optimal_k
 
-    def task4_wind_prediction(self, df_with_clusters, optimal_k):
+    def task4_wind_prediction(self, df_with_clusters, optimal_k, selected_features):
         """任务4：风电功率预测"""
         print("\n" + "=" * 60)
         print("任务4：风电功率预测模型")
@@ -361,8 +266,7 @@ class WindAnalysisNewStructure:
 
         task_dir = self.file_manager.switch_to_task_folder("Task4")
 
-        # 准备数据：根据聚类结果分割数据
-        selected_features = ['WINDSPEED', 'TEMPERATURE', 'WINDDIRECTION', 'PRESSURE']
+        # 准备数据：根据聚类结果分割数据（使用与 task2 一致的特征）
         X = df_with_clusters[selected_features].values
         y = df_with_clusters['WINDPOWER'].values
         clusters = df_with_clusters['cluster'].values
@@ -542,7 +446,7 @@ class WindAnalysisNewStructure:
         df_with_clusters, optimal_k = self.task3_kmeans_clustering(selected_features)
 
         # 任务4：预测模型
-        results = self.task4_wind_prediction(df_with_clusters, optimal_k)
+        results = self.task4_wind_prediction(df_with_clusters, optimal_k, selected_features)
 
         print("\n" + "=" * 60)
         print("所有任务完成！")
