@@ -5,7 +5,7 @@
 采用方法：支持向量回归(SVR)、BP神经网络、线性回归(Linear)
 评价指标：MAE、RMSE、R²
 
-依赖: 需先运行 task3_kmeans_analysis.py 生成 data_with_clusters.csv
+依赖: 需先运行 Task3.py 生成 data_with_clusters.csv
       若该文件缺失，将基于 data_normalized.csv 使用一致的逻辑重新聚类。
 """
 

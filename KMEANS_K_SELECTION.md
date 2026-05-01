@@ -1,7 +1,7 @@
 # K-means 最优聚类数 K 的选择方法
 
 > **所属项目**: 风电场数据分析 — Task 3 工况聚类  
-> **对应文件**: `common.py` → `kmeans_cluster()` / `task3_kmeans_analysis.py`
+> **对应文件**: `common.py` → `kmeans_cluster()` / `Task3.py`
 
 ---
 
@@ -189,7 +189,7 @@ sil = silhouette_score(X[idx_sample], kmeans.labels_[idx_sample])
 |------|------|--------|
 | `kmeans_cluster()` 函数定义 | `common.py` | ~270-340 |
 | 常量 `SILHOUETTE_SAMPLE_SIZE = 5000` | `common.py` | ~20 |
-| 调用入口 | `task3_kmeans_analysis.py` | ~45-50 |
+| 调用入口 | `Task3.py` | ~45-50 |
 | K 值选择图输出 | `RW3/task3_kmeans_k_selection.png` | — |
 
 ---

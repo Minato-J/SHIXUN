@@ -14,10 +14,10 @@
 |------|------|----------|
 | Task 1 | 数据预处理（缺失值填充、DBSCAN 去噪、Min-Max 归一化） | `analysis.py` |
 | Task 2 | 可视化与相关性分析（散点矩阵、玫瑰图、热力图、特征筛选） | `analysis.py` |
-| Task 3 | K-means 聚类工况划分 | `task3_kmeans_analysis.py` |
-| Task 4 | 风电功率预测（SVR / BP / Linear） | `task4_wind_prediction.py` |
+| Task 3 | K-means 聚类工况划分 | `Task3.py` |
+| Task 4 | 风电功率预测（SVR / BP / Linear） | `Task4.py` |
 
-另有 2 个全任务整合脚本：`wind_analysis_complete.py`（单文件运行）和 `wind_analysis_new_structure.py`（OOP + 时间戳输出）。
+另有 2 个全任务整合脚本：`wind_analysis.py`（单文件运行）和 `wind_analysis_v2.py`（OOP + 时间戳输出）。
 
 ---
 
@@ -29,7 +29,7 @@
 |---|------|------|
 | 1 | **聚类特征不一致** — 4 个脚本使用不同的特征子集做 K-means，cluster 标签含义互不兼容 | Task3 和 Task4 的结果无法对应 |
 | 2 | **`data_normalized.csv` 被反复覆盖** — `analysis.py` 写入无 cluster 列的版本，`task3` 又覆盖为含 cluster 列的版本 | 下游脚本在不同运行顺序下崩溃 |
-| 3 | **轮廓系数性能陷阱** — `wind_analysis_complete.py` 对 39,000+ 条数据直接调用 `silhouette_score()`（O(n²)） | 运行极其缓慢甚至卡死 |
+| 3 | **轮廓系数性能陷阱** — `wind_analysis.py` 对 39,000+ 条数据直接调用 `silhouette_score()`（O(n²)） | 运行极其缓慢甚至卡死 |
 
 ### 🟡 中等问题
 
@@ -122,31 +122,31 @@ RANDOM_SEED = 42
 - **新增**: `save_selected_features()` 保存 `selected_features.json`
 - 保留：所有自定义可视化代码（波形图、散点矩阵、玫瑰图、imshow 热力图）
 
-#### `task3_kmeans_analysis.py`
+#### `Task3.py`
 - 特征来源改为 `load_selected_features('selected_features.json')`
 - 聚类特征统一为 `selected_features + ['WINDPOWER']`
 - 聚类执行 → 调用 `kmeans_cluster()`（含采样优化 + K 值选择图）
 - **关键修复**: 输出到 `data_with_clusters.csv`，**不再覆盖** `data_normalized.csv`
 - 保留：PCA 可视化、风速-功率散点图、类别差异分析
 
-#### `task4_wind_prediction.py`
+#### `Task4.py`
 - 数据源改为优先读取 `data_with_clusters.csv`，回退到 `data_normalized.csv`
 - 模型输入特征从 `selected_features.json` 读取（而非硬编码 4 个特征）
 - 聚类回退逻辑 → 调用 `kmeans_cluster()`
 - 输出路径统一迁移到 `RW4(SOLO)/`
 
-#### `wind_analysis_complete.py`
+#### `wind_analysis.py`
 - 移除未使用的 import（DBSCAN、StandardScaler、NearestNeighbors、silhouette_score）
 - 聚类特征改为 `selected_features + ['WINDPOWER']`
 - 轮廓系数计算 → 调用 `kmeans_cluster()`（含采样优化）
 - 输出路径统一为 `RW2/`、`RW3/`、`RW4(SOLO)/`
 
-#### `wind_analysis_new_structure.py`
+#### `wind_analysis_v2.py`
 - 移除重复的字体配置、`ensure_dir`、import
 - 移除未使用的 `original_cwd` / `restore_original_dir` 逻辑
 - `task1_data_preprocessing` → 调用 `load_and_preprocess` + `dbscan_denoise` + `minmax_normalize`
-- `task3_kmeans_clustering` → 调用 `kmeans_cluster`，聚类特征统一
-- `task4_wind_prediction` → 添加 `selected_features` 参数，移除硬编码特征
+- `Task3.py` → 调用 `kmeans_cluster`，聚类特征统一
+- `Task4.py` → 添加 `selected_features` 参数，移除硬编码特征
 
 ---
 
@@ -156,8 +156,8 @@ RANDOM_SEED = 42
 
 ```
 ✅ analysis.py                 → 39312 行，生成 6 个输出文件
-✅ task3_kmeans_analysis.py   → K=2 (轮廓系数 0.3986)，生成 4 个输出文件
-✅ task4_wind_prediction.py   → 6 个模型全部训练成功，生成 7 个输出文件
+✅ Task3.py   → K=2 (轮廓系数 0.3986)，生成 4 个输出文件
+✅ Task4.py   → 6 个模型全部训练成功，生成 7 个输出文件
 ```
 
 ### 数据文件验证
@@ -210,20 +210,20 @@ RW4(SOLO)/    7 个文件  ✅
 python analysis.py
 
 # 2. K-means 聚类（依赖步骤 1）
-python task3_kmeans_analysis.py
+python Task3.py
 
 # 3. 功率预测（依赖步骤 2）
-python task4_wind_prediction.py
+python Task4.py
 ```
 
 ### 单文件全任务运行
 
 ```bash
 # 方式一：面向过程整合版（需先生成 data_normalized.csv）
-python wind_analysis_complete.py
+python wind_analysis.py
 
 # 方式二：面向对象 + 时间戳目录版（从 DATE.csv 开始全流程）
-python wind_analysis_new_structure.py
+python wind_analysis_v2.py
 ```
 
 ### 依赖

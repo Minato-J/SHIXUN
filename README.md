@@ -8,10 +8,10 @@
 SHIXUN/
 ├── DATE.csv                       # 原始风电场运行数据
 ├── analysis.py                    # 任务一 & 任务二：数据预处理 + 可视化相关性分析
-├── task3_kmeans_analysis.py       # 任务三：K-means 聚类分析
-├── task4_wind_prediction.py       # 任务四：风电功率预测（SVR / BP / Linear）
-├── wind_analysis_complete.py      # 全任务整合脚本（单文件运行）
-├── wind_analysis_new_structure.py # 全任务整合脚本（面向对象 + 时间戳输出目录）
+├── Task3.py                       # 任务三：K-means 聚类分析
+├── Task4.py                       # 任务四：风电功率预测（SVR / BP / Linear）
+├── wind_analysis.py               # 全任务整合脚本（单文件运行）
+├── wind_analysis_v2.py            # 全任务整合脚本（面向对象 + 时间戳输出目录）
 ├── data_normalized.csv            # 归一化处理后的数据集
 ├── RW1/                           # 任务一输出：波形图、时序图、散点图
 ├── RW2/                           # 任务二输出：散点矩阵、风向玫瑰图、相关性热力图
@@ -96,20 +96,20 @@ pip install pandas numpy matplotlib seaborn scikit-learn
 python analysis.py
 
 # 任务三（需先运行 analysis.py 生成 data_normalized.csv）
-python task3_kmeans_analysis.py
+python Task3.py
 
-# 任务四（需先运行 task3_kmeans_analysis.py）
-python task4_wind_prediction.py
+# 任务四（需先运行 Task3.py）
+python Task4.py
 ```
 
 ### 方式二：一键运行
 
 ```bash
 # 全任务整合版（面向过程）
-python wind_analysis_complete.py
+python wind_analysis.py
 
 # 全任务整合版（面向对象，输出带时间戳目录）
-python wind_analysis_new_structure.py
+python wind_analysis_v2.py
 ```
 
 ## 主要技术点
