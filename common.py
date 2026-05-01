@@ -388,3 +388,27 @@ def save_data_with_clusters(df, labels, output_path):
     df_out.to_csv(output_path, index=False)
     print(f"已保存含聚类标签的数据集: {output_path} ({len(df_out)} 行 × {len(df_out.columns)} 列)")
     return df_out
+
+
+# ============================================================
+# 时间序列工具（供 Task4 LSTM 使用）
+# ============================================================
+
+def create_sequences(X, y, seq_length=12):
+    """
+    将时间序列数据转换为 LSTM 所需的 3D 格式 (samples, timesteps, features)。
+
+    参数:
+        X: 特征数组 (n_samples, n_features)
+        y: 目标数组 (n_samples,)
+        seq_length: 序列长度（时间步数），默认 12（约 3 小时，15 分钟采样间隔）
+
+    返回:
+        X_seq: (n_samples - seq_length, seq_length, n_features)
+        y_seq: (n_samples - seq_length,)
+    """
+    X_seq, y_seq = [], []
+    for i in range(len(X) - seq_length):
+        X_seq.append(X[i:i + seq_length])
+        y_seq.append(y[i + seq_length])
+    return np.array(X_seq), np.array(y_seq)

@@ -4,7 +4,7 @@
 四任务整合脚本 — 单次运行完成所有分析流程。
 
 依赖: 需要先有 DATE.csv 原始数据（首次运行需 analysis.py 生成 data_normalized.csv）
-输出: 各任务图表分别保存到 RW2/、RW3/、RW4(SOLO)/ 目录
+输出: 各任务图表分别保存到 RW2/、RW3/、RW4/ 目录
 """
 
 import pandas as pd
@@ -341,10 +341,10 @@ if summary_results:
             axes[i].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    ensure_dir('RW4(SOLO)/model_comparison.png')
-    plt.savefig('RW4(SOLO)/model_comparison.png', dpi=200, bbox_inches='tight')
+    ensure_dir('RW4/model_comparison.png')
+    plt.savefig('RW4/model_comparison.png', dpi=200, bbox_inches='tight')
     plt.close()
-    print("已保存: RW4(SOLO)/model_comparison.png")
+    print("已保存: RW4/model_comparison.png")
 
     # 绘制预测值vs真实值曲线图
     for cluster_id in results:
@@ -353,7 +353,7 @@ if summary_results:
                 actual = results[cluster_id][model_name]['actual']
                 pred = results[cluster_id][model_name]['predictions']
 
-                out_path = f'RW4(SOLO)/prediction_{cluster_id}_{model_name}.png'
+                out_path = f'RW4/prediction_{cluster_id}_{model_name}.png'
                 ensure_dir(out_path)
 
                 plt.figure(figsize=(10, 6))
